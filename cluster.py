@@ -1,0 +1,111 @@
+import numpy as np
+import random
+import time
+import matplotlib.pyplot as plt
+from scipy.spatial.distance import cdist
+from keras.models import load_model
+# 计算两个矩阵的距离矩阵
+def compute_distances_no_loops(A, B):
+    return cdist(A,B,metric='euclidean')
+
+# 聚类算法的实现
+# 需要聚类的数据data
+# K 聚类的个数
+# tol 聚类的容差，即ΔJ
+# 聚类迭代都最大次数N
+def K_means(data,K,tol,N):
+    #一共有多少条数据
+    n = np.shape(data)[0]
+    # 从n条数据中随机选择K条，作为初始中心向量
+    # centerId是初始中心向量的索引坐标
+    centerId = range(0, K)
+    # 获得初始中心向量,k个
+    centerPoints = data[centerId]
+    # 计算data到centerPoints的距离矩阵
+    # dist[i][:],是i个点到三个中心点的距离
+    dist = compute_distances_no_loops(data, centerPoints)
+    # axis=1寻找每一行中最小值都索引
+    # getA()是将mat转为ndarray
+    # squeeze()是将label压缩成一个列表
+    labels = np.argmin(dist, axis=1).squeeze()
+    # 初始化old J
+    oldVar = -0.0001
+    # data - centerPoint[labels]，获得每个向量与中心向量之差
+    # np.sqrt(np.sum(np.power(data - centerPoint[labels], 2)，获得每个向量与中心向量距离
+    # 计算new J
+    newVar = np.sum(np.sqrt(np.sum(np.power(data - centerPoints[labels], 2), axis=1)))
+    # 迭代次数
+    count=0
+    # 当ΔJ大于容差且循环次数小于迭代次数，一直迭代。负责结束聚类
+    # abs(newVar - oldVar) >= tol:
+    while count<N and abs(newVar - oldVar) > tol:
+        oldVar = newVar
+        for i in range(K):
+            # 重新计算每一个类别都中心向量
+            centerPoints[i] = np.mean(data[np.where(labels == i)], 0)
+        # 重新计算距离矩阵
+        dist = compute_distances_no_loops(data, centerPoints)
+        # 重新分类
+        labels = np.argmin(dist, axis=1).squeeze()
+        # 重新计算new J
+        newVar = np.sum(np.sqrt(np.sum(np.power(data - centerPoints[labels], 2), axis=1)))
+        # 迭代次数加1
+        count+=1
+    # 返回类别标识，中心坐标
+    return labels,centerPoints
+
+def data_pre():
+    data = np.genfromtxt('dataset_uci\\final_X_train.txt',delimiter=',',dtype=float)
+    data = data[:,0:16]
+    return data
+
+def evaluate(singal, labels):
+    a = np.zeros(shape=(6,6))
+    for i in range(len(singal)):
+        a[int(labels[i])][int(singal[i]) - 1] = a[int(labels[i])][int(singal[i]) - 1] + 1
+    
+    sum_mode = 0
+    for i in range(6):
+        sum_mode += np.max(a[i])
+    return sum_mode / len(singal)
+
+starttime = time.clock()
+data = data_pre()
+# labels,_=K_means(data,6,0.0001,50000)
+singal = np.genfromtxt('dataset_uci\\final_y_train.txt',delimiter=',',dtype=float)
+
+# data = np.c_[data,singal]
+# data = np.c_[data,labels]
+
+# a = np.zeros(shape=(6,6))
+# print(np.shape(data))
+# for i in range(len(data)):
+#     a[int(data[i][17])][int(data[i][16]) - 1] = a[int(data[i][17])][int(data[i][16]) - 1] + 1
+# print(a)
+
+labels,_=K_means(data,6,0.0001,5000)
+org_eva = evaluate(singal, labels)
+print(np.shape(data))
+print(evaluate(singal, labels))
+
+model = load_model("my_model.h5")
+
+for i in range(1000):
+    noise = np.random.normal(0, 1, (10, 100))
+    gen_sam = model.predict(noise)
+    gen_sam = gen_sam.reshape(10, 16)
+
+    data_tmp = np.vstack((data, gen_sam))
+    labels,_=K_means(data_tmp,6,0.0001,5000)
+
+    tmp = evaluate(singal, labels)
+    if tmp > org_eva:
+        org_eva = tmp
+        data = data_tmp
+
+labels,_=K_means(data,6,0.0001,5000)
+print(np.shape(data))
+print(evaluate(singal, labels))
+
+endtime = time.clock()
+print(endtime - starttime)
